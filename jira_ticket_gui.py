@@ -13,6 +13,14 @@ except ImportError:
     AI_AVAILABLE = False
     print("⚠️  AI document analyzer not available. Install OpenAI package: pip install openai")
 
+# Import comprehensive analyzer
+try:
+    from comprehensive_document_analyzer import get_comprehensive_issues
+    COMPREHENSIVE_AVAILABLE = True
+except ImportError:
+    COMPREHENSIVE_AVAILABLE = False
+    print("⚠️  Comprehensive document analyzer not available.")
+
 # Import configuration
 try:
     from config import JIRA_CONFIG
@@ -89,21 +97,21 @@ class JiraApp:
                                       values=["None"], state="readonly", width=47)
         self.epic_combo.grid(row=len(labels)+3, column=1, sticky="ew", padx=5, pady=5)
         
+        # Button to fetch epics (moved to be right under Epic field)
+        fetch_epics_button = tk.Button(input_frame, text="🔄 Fetch Epics", command=self.fetch_epics, bg="#f0f0f0")
+        fetch_epics_button.grid(row=len(labels)+4, column=0, sticky="w", padx=5, pady=5)
+        
         # Status dropdown
         status_label = tk.Label(input_frame, text="Initial Status:")
-        status_label.grid(row=len(labels)+4, column=0, sticky="w", padx=5, pady=5)
+        status_label.grid(row=len(labels)+5, column=0, sticky="w", padx=5, pady=5)
         self.status_var = tk.StringVar(value="To Do")
         self.status_combo = ttk.Combobox(input_frame, textvariable=self.status_var, 
                                         values=["To Do", "In Progress", "Done", "Backlog"], state="readonly", width=47)
-        self.status_combo.grid(row=len(labels)+4, column=1, sticky="ew", padx=5, pady=5)
+        self.status_combo.grid(row=len(labels)+5, column=1, sticky="ew", padx=5, pady=5)
         
         # Button to fetch statuses
         fetch_statuses_button = tk.Button(input_frame, text="🔄 Fetch Statuses", command=self.fetch_statuses, bg="#e8f5e8")
-        fetch_statuses_button.grid(row=len(labels)+5, column=0, sticky="w", padx=5, pady=5)
-        
-        # Button to fetch epics
-        fetch_epics_button = tk.Button(input_frame, text="🔄 Fetch Epics", command=self.fetch_epics, bg="#f0f0f0")
-        fetch_epics_button.grid(row=len(labels)+6, column=0, sticky="w", padx=5, pady=5)
+        fetch_statuses_button.grid(row=len(labels)+6, column=0, sticky="w", padx=5, pady=5)
         
         # Analysis Mode selection
         analysis_label = tk.Label(input_frame, text="Analysis Mode:")
@@ -118,13 +126,15 @@ class JiraApp:
                 analysis_options.append("Enhanced")  # Previous enhanced extraction
             else:
                 analysis_options.append("AI-Powered (Configure API Key)")
+        if COMPREHENSIVE_AVAILABLE:
+            analysis_options.append("Comprehensive")
         
         analysis_combo = ttk.Combobox(input_frame, textvariable=self.analysis_mode_var, 
                                      values=analysis_options, state="readonly", width=47)
         analysis_combo.grid(row=len(labels)+7, column=1, sticky="ew", padx=5, pady=5)
         
         # Add tooltip/help text
-        analysis_help = tk.Label(input_frame, text="ℹ️ AI-Powered: Uses OpenAI to intelligently extract tasks | Enhanced: Extracts text + images | Basic: Simple text parsing", 
+        analysis_help = tk.Label(input_frame, text="ℹ️ AI-Powered: Uses OpenAI to intelligently extract tasks | Enhanced: Extracts text + images | Basic: Simple text parsing | Comprehensive: Analyzes document content and structure", 
                                font=("Arial", 8), fg="gray", wraplength=400, justify="left")
         analysis_help.grid(row=len(labels)+8, column=0, columnspan=2, sticky="w", padx=5, pady=(0,5))
         
@@ -155,6 +165,10 @@ class JiraApp:
         self.status_label = tk.Label(root, text="📁 Select a Word document and click 'Preview Tickets' to start", fg="blue")
         self.status_label.pack(pady=5)
 
+        # Placeholder for ticket selection frame (will be inserted here)
+        self.ticket_selection_container = tk.Frame(root)
+        # Initially hidden - will be shown when tickets are available
+
         # Scrolled text widget to act as an output console
         console_label = tk.Label(root, text="Preview / Output Console:", anchor="w")
         console_label.pack(fill="x", padx=10, pady=(10,0))
@@ -164,6 +178,10 @@ class JiraApp:
         
         # Store parsed issues for later use
         self.parsed_issues = []
+        
+        # Store ticket selection variables
+        self.ticket_selection_vars = []
+        self.ticket_selection_frame = None
         
         # Auto-fetch projects if credentials are available
         self.root.after(500, self.auto_fetch_projects)  # Delay to ensure GUI is fully loaded
@@ -194,6 +212,7 @@ class JiraApp:
             self.create_button.config(state="disabled", bg="#cccccc", fg="gray", text="2️⃣ Create in Jira")
             self.status_label.config(text="📄 Document selected! Click 'Preview Tickets' to see what will be created", fg="green")
             self.clear_console()
+            self.clear_ticket_selection()
         else:
             self.file_path_label.config(text="No file selected.")
             self.status_label.config(text="📁 Select a Word document and click 'Preview Tickets' to start", fg="blue")
@@ -400,6 +419,161 @@ class JiraApp:
         self.output_console.config(state="normal")
         self.output_console.delete(1.0, tk.END)
         self.output_console.config(state="disabled")
+    
+    def clear_ticket_selection(self):
+        """Clears the ticket selection interface."""
+        if self.ticket_selection_frame:
+            self.ticket_selection_frame.destroy()
+            self.ticket_selection_frame = None
+        self.ticket_selection_vars = []
+        # Hide the container when no tickets are selected
+        if hasattr(self, 'ticket_selection_container'):
+            self.ticket_selection_container.pack_forget()
+    
+    def create_ticket_selection_interface(self):
+        """Creates the ticket selection interface with checkboxes."""
+        # Clear any existing selection interface
+        self.clear_ticket_selection()
+        
+        if not self.parsed_issues:
+            return
+        
+        # Show the container BEFORE the console
+        self.ticket_selection_container.pack(fill="x", padx=10, pady=5, before=self.output_console)
+        
+        # Create a frame for ticket selection inside the container
+        self.ticket_selection_frame = tk.Frame(self.ticket_selection_container, bg="#f0f0f0", relief="ridge", bd=2)
+        self.ticket_selection_frame.pack(fill="both", expand=True)
+        
+        # Title
+        title_label = tk.Label(self.ticket_selection_frame, text="📋 Select Tickets to Create:", 
+                              font=("Arial", 12, "bold"), bg="#f0f0f0")
+        title_label.pack(anchor="w", padx=10, pady=(10, 5))
+        
+        # Create scrollable frame for ticket list
+        canvas = tk.Canvas(self.ticket_selection_frame, height=200, bg="#f0f0f0")
+        scrollbar = ttk.Scrollbar(self.ticket_selection_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg="#f0f0f0")
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Create checkboxes for each ticket
+        self.ticket_selection_vars = []
+        for i, issue in enumerate(self.parsed_issues):
+            # Create checkbox variable (default to checked)
+            var = tk.BooleanVar(value=True)
+            self.ticket_selection_vars.append(var)
+            
+            # Create frame for this ticket
+            ticket_frame = tk.Frame(scrollable_frame, bg="#ffffff", relief="solid", bd=1)
+            ticket_frame.pack(fill="x", padx=5, pady=2)
+            
+            # Checkbox and ticket number
+            checkbox_frame = tk.Frame(ticket_frame, bg="#ffffff")
+            checkbox_frame.pack(fill="x", padx=5, pady=5)
+            
+            checkbox = tk.Checkbutton(checkbox_frame, variable=var, bg="#ffffff", 
+                                    command=self.update_create_button_text)
+            checkbox.pack(side="left")
+            
+            ticket_number_label = tk.Label(checkbox_frame, text=f"#{i+1}", 
+                                         font=("Arial", 10, "bold"), bg="#ffffff", fg="#666")
+            ticket_number_label.pack(side="left", padx=(5, 10))
+            
+            # Title
+            title_text = issue['title'][:80] + ('...' if len(issue['title']) > 80 else '')
+            title_label = tk.Label(ticket_frame, text=f"📝 {title_text}", 
+                                 font=("Arial", 10, "bold"), bg="#ffffff", anchor="w")
+            title_label.pack(fill="x", padx=5, pady=(0, 2))
+            
+            # Short description
+            desc_text = issue['description'][:150] + ('...' if len(issue['description']) > 150 else '')
+            desc_label = tk.Label(ticket_frame, text=f"📄 {desc_text}", 
+                                font=("Arial", 9), bg="#ffffff", anchor="w", 
+                                wraplength=700, justify="left", fg="#444")
+            desc_label.pack(fill="x", padx=5, pady=(0, 2))
+            
+            # Additional info (images, priority, etc.)
+            info_parts = []
+            if 'images' in issue and issue['images']:
+                info_parts.append(f"📸 {len(issue['images'])} images")
+            if 'priority' in issue:
+                info_parts.append(f"⚡ {issue['priority']}")
+            if 'complexity' in issue:
+                info_parts.append(f"🔧 {issue['complexity']}")
+            if 'category' in issue:
+                info_parts.append(f"📂 {issue['category']}")
+            
+            if info_parts:
+                info_text = " | ".join(info_parts)
+                info_label = tk.Label(ticket_frame, text=info_text, 
+                                    font=("Arial", 8), bg="#ffffff", anchor="w", fg="#666")
+                info_label.pack(fill="x", padx=5, pady=(0, 5))
+        
+        # Pack canvas and scrollbar
+        canvas.pack(side="left", fill="both", expand=True, padx=(10, 0), pady=(0, 10))
+        scrollbar.pack(side="right", fill="y", pady=(0, 10))
+        
+        # Control buttons
+        button_frame = tk.Frame(self.ticket_selection_frame, bg="#f0f0f0")
+        button_frame.pack(fill="x", padx=10, pady=(0, 10))
+        
+        # Select All / Deselect All buttons
+        select_all_btn = tk.Button(button_frame, text="✅ Select All", 
+                                  command=self.select_all_tickets, bg="#e8f5e8")
+        select_all_btn.pack(side="left", padx=(0, 5))
+        
+        deselect_all_btn = tk.Button(button_frame, text="❌ Deselect All", 
+                                   command=self.deselect_all_tickets, bg="#ffebee")
+        deselect_all_btn.pack(side="left", padx=(0, 5))
+        
+        # Update the create button text
+        self.update_create_button_text()
+    
+    def select_all_tickets(self):
+        """Selects all tickets."""
+        for var in self.ticket_selection_vars:
+            var.set(True)
+        self.update_create_button_text()
+    
+    def deselect_all_tickets(self):
+        """Deselects all tickets."""
+        for var in self.ticket_selection_vars:
+            var.set(False)
+        self.update_create_button_text()
+    
+    def update_create_button_text(self):
+        """Updates the create button text based on selected tickets."""
+        if not self.ticket_selection_vars:
+            return
+        
+        selected_count = sum(1 for var in self.ticket_selection_vars if var.get())
+        total_count = len(self.ticket_selection_vars)
+        
+        if selected_count == 0:
+            self.create_button.config(text="2️⃣ No Tickets Selected", 
+                                    state="disabled", bg="#cccccc", fg="gray")
+        else:
+            self.create_button.config(text=f"2️⃣ Create {selected_count} Selected Tickets", 
+                                    state="normal", bg="#4CAF50", fg="white")
+    
+    def get_selected_issues(self):
+        """Returns only the selected issues based on checkbox states."""
+        if not self.ticket_selection_vars:
+            return self.parsed_issues
+        
+        selected_issues = []
+        for i, var in enumerate(self.ticket_selection_vars):
+            if var.get() and i < len(self.parsed_issues):
+                selected_issues.append(self.parsed_issues[i])
+        
+        return selected_issues
 
     def log_message(self, message):
         """Logs a message to the output console in a thread-safe way."""
@@ -425,6 +599,7 @@ class JiraApp:
 
         try:
             self.clear_console()
+            self.clear_ticket_selection()
             self.log_message("📄 Parsing document...")
             
             # Get selected analysis mode
@@ -444,6 +619,14 @@ class JiraApp:
             elif analysis_mode == "Enhanced":
                 self.log_message("🔧 Using enhanced extraction (with images)...")
                 self.parsed_issues = get_enhanced_issues(self.selected_file)
+                
+            elif analysis_mode == "Comprehensive":
+                if not COMPREHENSIVE_AVAILABLE:
+                    self.log_message("❌ Comprehensive document analyzer not available. Please install it.")
+                    messagebox.showerror("Comprehensive Analyzer Not Available", "The Comprehensive Document Analyzer is not available. Please install it.")
+                    return
+                self.log_message("🔍 Using comprehensive document analysis...")
+                self.parsed_issues = get_comprehensive_issues(self.selected_file)
                 
             else:  # Basic mode
                 self.log_message("📝 Using basic text extraction...")
@@ -492,11 +675,13 @@ class JiraApp:
             
             self.log_message("=" * 60)
             self.log_message("✅ Preview complete! Review the tickets above.")
-            self.log_message("🎯 Fill in your Jira credentials and click 'Create in Jira' to proceed.")
+            self.log_message("🎯 Select which tickets to create using the checkboxes below.")
             
-            # Enable the create button with clear styling
-            self.create_button.config(state="normal", bg="#4CAF50", fg="white", text=f"2️⃣ Create {len(self.parsed_issues)} Tickets")
-            self.status_label.config(text=f"✅ Ready to create {len(self.parsed_issues)} tickets! Fill in Jira credentials and click 'Create {len(self.parsed_issues)} Tickets'", fg="green")
+            # Create the ticket selection interface
+            self.create_ticket_selection_interface()
+            
+            # Update status
+            self.status_label.config(text=f"✅ Found {len(self.parsed_issues)} tickets! Select which ones to create and fill in Jira credentials.", fg="green")
             
         except FileNotFoundError:
             self.log_message(f"❌ Error: The file '{self.selected_file}' was not found.")
@@ -541,14 +726,20 @@ class JiraApp:
             messagebox.showerror("No Preview", "Please click 'Preview Tickets' first to see what will be created.")
             return
 
+        # Get selected tickets
+        selected_issues = self.get_selected_issues()
+        if not selected_issues:
+            messagebox.showerror("No Tickets Selected", "Please select at least one ticket to create.")
+            return
+
         # Confirmation dialog with clear details
         epic_info = f"🔗 Epic: {epic_key}" if epic_key else "🔗 Epic: None"
         status_info = f"🔗 Status: {selected_status}" if selected_status else "🔗 Status: None"
         result = messagebox.askyesno(
             "⚠️ Confirm Ticket Creation", 
-            f"You are about to create {len(self.parsed_issues)} tickets in Jira:\\n\\n"
+            f"You are about to create {len(selected_issues)} selected tickets in Jira:\\n\\n"
             f"📍 Project: {project_key}\\n"
-            f"🎫 Tickets: {len(self.parsed_issues)}\\n"
+            f"🎫 Selected Tickets: {len(selected_issues)} out of {len(self.parsed_issues)}\\n"
             f"📋 Type: {issue_type}\\n"
             f"{epic_info}\\n"
             f"{status_info}\\n"
@@ -567,13 +758,13 @@ class JiraApp:
         # Run the core logic in a separate thread to prevent the GUI from freezing
         thread = threading.Thread(
             target=self.run_creation_logic, 
-            args=(server, username, api_token, project_key, epic_key, selected_status)
+            args=(server, username, api_token, project_key, epic_key, selected_status, selected_issues)
         )
         thread.daemon = True # Allows main window to close even if thread is running
         thread.start()
 
-    def run_creation_logic(self, server, username, api_token, project_key, epic_key=None, status_name=None):
-        """The core logic that creates Jira tickets from the parsed issues."""
+    def run_creation_logic(self, server, username, api_token, project_key, epic_key=None, status_name=None, selected_issues=None):
+        """The core logic that creates Jira tickets from the selected issues."""
         # Disable buttons during processing to prevent multiple submissions
         self.create_button.config(state="disabled", text="🔄 Creating...", bg="#ff9800")
         self.preview_button.config(state="disabled")
@@ -598,11 +789,14 @@ class JiraApp:
             else:
                 self.log_message(f"🔗 Initial Status: None (tickets will start as 'To Do')")
             
+            # Use selected issues or fall back to all parsed issues
+            issues_to_create = selected_issues if selected_issues else self.parsed_issues
+            
             # Temporarily redirect stdout to our GUI console to capture prints
             sys.stdout = self
             
-            # Call the main ticket creation function with our pre-parsed issues
-            created_tickets = create_jira_tickets_with_type(server, username, api_token, project_key, self.parsed_issues, issue_type, epic_key, status_name)
+            # Call the main ticket creation function with our selected issues
+            created_tickets = create_jira_tickets_with_type(server, username, api_token, project_key, issues_to_create, issue_type, epic_key, status_name)
             
             if created_tickets:
                 self.log_message("\n🎉 All tickets created successfully!")
@@ -646,7 +840,8 @@ class JiraApp:
         finally:
             # Restore standard output and re-enable buttons
             sys.stdout = sys.__stdout__
-            self.create_button.config(state="normal", text=f"2️⃣ Create {len(self.parsed_issues)} Tickets", bg="#4CAF50")
+            # Update button text based on current selection
+            self.update_create_button_text()
             self.preview_button.config(state="normal")
     
     # --- Stdout Redirection ---

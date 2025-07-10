@@ -6,6 +6,7 @@ It includes both a command-line interface (CLI) for technical users and a simple
 
 ## Features
 
+-   **🔬 Comprehensive Document Analysis** - Extracts ALL content types (text, images, tables, links, videos, headings) with intelligent categorization by mobile/desktop/pages
 -   **AI-Powered Document Analysis** - Uses OpenAI GPT to intelligently extract tasks from any document format
 -   **Enhanced Extraction** - Extracts images and structured content from Word documents
 -   **Image Attachment** - Automatically attaches images from Word documents to Jira tickets
@@ -112,6 +113,7 @@ The GUI is the easiest way to use this tool, especially for non-technical users.
     -   Common statuses include: To Do, In Progress, Done, Backlog, etc.
 
 7.  **Choose Analysis Mode:**
+    -   **Comprehensive**: Extracts ALL content types (text, images, tables, links, videos, headings) with intelligent categorization
     -   **AI-Powered**: Uses OpenAI to intelligently extract tasks from any document format (requires OpenAI API key)
     -   **Enhanced**: Extracts text and images from Word documents with improved parsing
     -   **Basic**: Simple text parsing for basic use cases
@@ -162,6 +164,48 @@ This is the second line of the description.
 This is the title for the second issue.
 This description only has one line.
 ``` 
+
+## Comprehensive Document Analysis
+
+The Comprehensive mode extracts **ALL content types** from Word documents and provides intelligent categorization. This is the most advanced analysis mode available.
+
+### **🔍 What It Extracts:**
+- **📄 Text Content**: All paragraphs, headings, lists, and formatted text
+- **📸 Images**: All embedded images with automatic attachment to relevant tickets
+- **📊 Tables**: Structured table data with proper formatting
+- **🔗 Links**: Hyperlinks, URLs, email addresses with type classification
+- **🎥 Videos**: Video links and embedded media references
+- **📋 Document Structure**: Headings, sections, and content hierarchy
+
+### **🧠 Intelligent Categorization:**
+- **📱 Device Type**: Automatically categorizes issues as Mobile, Desktop, or Both
+- **📄 Page Type**: Identifies Homepage, About, News, Contact, or General pages
+- **🔧 Component Type**: Classifies by Carousel, Navigation, Images, Forms, Layout
+- **🐛 Issue Type**: Categorizes as Bug, Improvement, Feature, or Content
+
+### **📊 Rich Jira Tickets:**
+Each created ticket includes:
+- **Comprehensive Description**: All related content with proper formatting
+- **Image Attachments**: Automatically attached relevant images
+- **Link References**: All related links with type classification (🎥 Video, 📄 Document, 🌐 External, etc.)
+- **Table Data**: Properly formatted table content
+- **Categorization Tags**: Smart labels for device, page, component, and issue type
+- **AI Insights**: Priority, complexity, and category analysis (when AI is available)
+
+### **Example Output:**
+```
+📝 Title: Fix Carousel Display Issues on Mobile
+📋 Issue Classification:
+- Device: Mobile
+- Page Type: Homepage  
+- Component: Carousel
+- Issue Type: Bug
+
+📊 Tables: (if present)
+📸 Attached Images: image_3.png, image_7.png
+🔗 Related Links: 🎥 Demo Video, 📄 Requirements Doc
+🤖 AI Analysis: Priority: High, Complexity: Medium
+```
 
 ## AI-Powered Document Analysis
 
